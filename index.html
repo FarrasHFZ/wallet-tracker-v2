@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Wallet">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+
+  <title>Wallet Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase Compat -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+  <!-- Google Identity Services (for Sheets OAuth) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- App config: override API_URL per environment -->
+  <script>
+    // CHANGE THIS to your Railway/Render URL when deploying
+    window.WT_API_URL = 'http://localhost:3001';
+  </script>
+
+  <!-- API client + App logic -->
+  <script src="src/api.js" defer></script>
+  <script src="src/app.js" defer></script>
+
+  <!-- Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(r => console.log('SW:', r.scope))
+          .catch(e => console.warn('SW failed:', e));
+      });
+    }
+  </script>
+</head>
+<body class="dark">
+
+  <!-- Loading screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:56px;margin-bottom:16px">
+        <rect width="56" height="56" rx="16" fill="#1d9bf0"/>
+        <path d="M11 19h34a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H11a3 3 0 0 1-3-3V22a3 3 0 0 1 3-3Z" stroke="white" stroke-width="2" fill="none"/>
+        <circle cx="38" cy="28" r="3.5" fill="white"/>
+        <line x1="11" y1="24" x2="28" y2="24" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <line x1="11" y1="29" x2="22" y2="29" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <p class="loading-text">Wallet Tracker</p>
+      <div class="loading-spinner"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="auth-screen hidden">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="56" height="56" rx="16" fill="#1d9bf0"/>
+          <path d="M11 19h34a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H11a3 3 0 0 1-3-3V22a3 3 0 0 1 3-3Z" stroke="white" stroke-width="2" fill="none"/>
+          <circle cx="38" cy="28" r="3.5" fill="white"/>
+          <line x1="11" y1="24" x2="28" y2="24" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <line x1="11" y1="29" x2="22" y2="29" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h1 class="auth-title">Wallet Tracker</h1>
+      <p class="auth-subtitle">Track your spending, anywhere.</p>
+      <div class="auth-version-badge">v2.0 — Multi-user</div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login-btn" onclick="showAuthTab('login')">Sign In</button>
+        <button class="auth-tab" id="tab-signup-btn" onclick="showAuthTab('signup')">Sign Up</button>
+      </div>
+
+      <!-- Login -->
+      <div id="auth-login" class="auth-form">
+        <div class="auth-field">
+          <label class="auth-label">Email</label>
+          <input type="email" id="login-email" class="auth-input" placeholder="you@example.com"
+            autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <input type="password" id="login-password" class="auth-input" placeholder="••••••••"
+            autocomplete="current-password" onkeydown="if(event.key==='Enter')signInEmail()">
+        </div>
+        <div id="auth-error-login" class="auth-error hidden"></div>
+        <button class="auth-btn-primary" onclick="signInEmail()">
+          <span id="login-text">Sign In</span>
+          <span id="login-loader" class="loader hidden"></span>
+        </button>
+        <div class="auth-footer-row">
+          <button id="forgot-btn" class="auth-link-btn" onclick="forgotPassword()">Forgot password?</button>
+        </div>
+        <div class="auth-divider"><span>or</span></div>
+        <button class="auth-btn-google" onclick="signInGoogle()">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continue with Google
+        </button>
+        <p class="auth-popup-note">Desktop only. On mobile, use email/password above.</p>
+      </div>
+
+      <!-- Sign Up -->
+      <div id="auth-signup" class="auth-form hidden">
+        <div class="auth-field">
+          <label class="auth-label">Email</label>
+          <input type="email" id="signup-email" class="auth-input" placeholder="you@example.com"
+            autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('signup-password').focus()">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <input type="password" id="signup-password" class="auth-input" placeholder="Min. 6 characters"
+            autocomplete="new-password" onkeydown="if(event.key==='Enter')document.getElementById('signup-confirm').focus()">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Confirm Password</label>
+          <input type="password" id="signup-confirm" class="auth-input" placeholder="Repeat password"
+            autocomplete="new-password" onkeydown="if(event.key==='Enter')signUpEmail()">
+        </div>
+        <div id="auth-error-signup" class="auth-error hidden"></div>
+        <button class="auth-btn-primary" onclick="signUpEmail()">
+          <span id="signup-text">Create Account</span>
+          <span id="signup-loader" class="loader hidden"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app-screen" class="hidden">
+
+    <div id="offline-banner" class="offline-banner hidden">
+      No connection — spending saved locally, syncs when online
+    </div>
+
+    <div id="suggestion-banner" class="suggestion-banner hidden">
+      <span id="suggestion-text" class="suggestion-text"></span>
+      <button class="suggestion-apply" onclick="applySuggestion()">Use this</button>
+      <button class="suggestion-dismiss" onclick="dismissSuggestion()">✕</button>
+    </div>
+
+    <!-- Delete Modal -->
+    <div id="delete-modal" class="modal-overlay hidden" onclick="closeDeleteIfOverlay(event)">
+      <div class="modal-content modal-compact">
+        <h3 class="modal-title">Delete transaction?</h3>
+        <p id="delete-preview" class="delete-preview"></p>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="closeDelete()">Cancel</button>
+          <button class="btn-delete-confirm" onclick="confirmDelete()">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal-overlay hidden" onclick="closeEditIfOverlay(event)">
+      <div class="modal-content">
+        <h3 class="modal-title">Edit Transaction</h3>
+        <label class="input-label">Description</label>
+        <input type="text" id="edit-desc" class="input-field" autocomplete="off">
+        <label class="input-label">Amount (Rp)</label>
+        <div class="amount-wrapper">
+          <span class="currency-prefix">Rp</span>
+          <input type="text" id="edit-amount" class="input-field input-amount" inputmode="numeric" autocomplete="off">
+        </div>
+        <label class="input-label">Date</label>
+        <input type="date" id="edit-date" class="input-field">
+        <label class="input-label">Notes <span class="optional-tag">optional</span></label>
+        <input type="text" id="edit-notes" class="input-field" placeholder="e.g. lunch with client..." autocomplete="off">
+        <label class="input-label">Category</label>
+        <div id="edit-category-chips" class="category-chips"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
+          <button class="btn-save" onclick="saveEdit()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <svg class="logo-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="9" fill="#1d9bf0"/>
+          <path d="M6 11h20a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z" stroke="white" stroke-width="1.5" fill="none"/>
+          <circle cx="23" cy="16" r="2" fill="white"/>
+          <line x1="6" y1="14.5" x2="17" y2="14.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="6" y1="17.5" x2="13" y2="17.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <h1>Wallet Tracker</h1>
+      </div>
+      <div class="header-right">
+        <div id="api-status" class="api-status-dot" title="API status"></div>
+        <div id="sync-indicator" class="sync-indicator hidden">⚠ <span id="sync-count">0</span></div>
+        <button class="dark-toggle" id="dark-toggle" onclick="toggleDark()" title="Toggle theme">
+          <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+        <div id="user-avatar" class="user-avatar" onclick="toggleUserMenu()"></div>
+        <div id="user-menu" class="user-menu hidden">
+          <div id="user-email-display" class="user-menu-email"></div>
+          <button onclick="handleSignOut()" class="user-menu-signout">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-content">
+
+      <!-- INPUT TAB -->
+      <section id="tab-input" class="tab-content active">
+        <div class="input-card">
+          <label for="input-desc" class="input-label">What did you buy?</label>
+          <input type="text" id="input-desc" class="input-field" placeholder="mie ayam, kopi, grab..." autocomplete="off" oninput="onDescInput()">
+          <label for="input-amount" class="input-label">How much?</label>
+          <div class="amount-wrapper">
+            <span class="currency-prefix">Rp</span>
+            <input type="text" id="input-amount" class="input-field input-amount" inputmode="numeric" placeholder="15.000" autocomplete="off">
+          </div>
+          <label class="input-label">Date</label>
+          <div class="date-toggle">
+            <button id="btn-today" class="date-pill active" onclick="setDateToday()">Today</button>
+            <div class="date-pick-wrapper">
+              <input type="date" id="input-date" class="date-pick" onchange="setDateCustom()">
+            </div>
+          </div>
+          <!-- Receipt -->
+          <div class="receipt-row">
+            <label class="input-label">Receipt <span class="optional-tag">optional</span></label>
+            <button type="button" class="btn-camera" id="btn-camera" onclick="openReceiptCamera()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Scan Receipt
+            </button>
+            <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" style="display:none" onchange="onReceiptSelected(event)">
+          </div>
+          <p id="ocr-hint" class="ocr-hint">📸 Photo auto-fills description & amount via server OCR</p>
+          <div id="receipt-preview-container" class="receipt-preview-container hidden">
+            <img id="receipt-preview-img" class="receipt-preview-img" alt="Receipt preview">
+            <button class="btn-clear-receipt" onclick="clearReceiptPreview()" title="Remove">✕</button>
+          </div>
+
+          <button id="btn-submit" class="btn-primary" onclick="handleSubmit()">
+            <span id="btn-submit-text">Add Spending</span>
+            <span id="btn-submit-loader" class="loader hidden"></span>
+          </button>
+        </div>
+
+        <div id="today-total" class="today-total hidden">
+          <span class="today-label">Today's total</span>
+          <span id="today-total-amount" class="today-amount">Rp 0</span>
+        </div>
+
+        <div class="save-template-row">
+          <button class="btn-save-template" onclick="saveAsTemplate()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save as template
+          </button>
+        </div>
+
+        <div id="queue-notice" class="queue-notice hidden">
+          <span id="queue-notice-text"></span>
+          <button onclick="syncQueue()" class="btn-sync-now">Sync now</button>
+        </div>
+
+        <!-- Quick Templates -->
+        <div id="templates-section" class="templates-section">
+          <div class="templates-header">
+            <h3 class="section-title">Quick Templates</h3>
+            <button class="btn-manage-templates" onclick="switchTab('settings')">Manage</button>
+          </div>
+          <p class="section-hint">Tap to fill form instantly</p>
+          <div id="templates-list" class="templates-list">
+            <p class="empty-state-small">No templates yet</p>
+          </div>
+        </div>
+
+        <div id="recent-section" class="recent-section">
+          <h3 class="section-title" id="added-today-title">Added Today</h3>
+          <p class="section-hint">Tap to edit · Swipe left to delete</p>
+          <div id="recent-list" class="recent-list">
+            <p class="empty-state">No spending added today yet</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- HISTORY TAB -->
+      <section id="tab-history" class="tab-content">
+        <div class="history-header">
+          <h2 class="tab-title">History</h2>
+          <button class="btn-refresh" id="history-refresh-btn" onclick="loadHistory()" title="Refresh">
+            <svg id="history-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+        <div class="sort-bar">
+          <span class="sort-label">Sort:</span>
+          <div class="sort-options">
+            <button class="sort-btn active" data-sort="date-desc" onclick="setSort('date-desc')">Newest</button>
+            <button class="sort-btn" data-sort="date-asc" onclick="setSort('date-asc')">Oldest</button>
+            <button class="sort-btn" data-sort="amount-desc" onclick="setSort('amount-desc')">Highest</button>
+            <button class="sort-btn" data-sort="amount-asc" onclick="setSort('amount-asc')">Lowest</button>
+          </div>
+        </div>
+        <div class="search-bar-wrapper">
+          <svg class="search-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="history-search" class="search-input" placeholder="Search transactions..." oninput="applyHistoryFilter()">
+        </div>
+        <div class="filter-chips">
+          <button class="filter-chip active" data-cat="all" onclick="setFilterCat('all')">All</button>
+          <button class="filter-chip" data-cat="Food & Dining" onclick="setFilterCat('Food & Dining')">🍜 Food</button>
+          <button class="filter-chip" data-cat="Groceries" onclick="setFilterCat('Groceries')">🛒 Groceries</button>
+          <button class="filter-chip" data-cat="Transport" onclick="setFilterCat('Transport')">🚗 Transport</button>
+          <button class="filter-chip" data-cat="Health" onclick="setFilterCat('Health')">💊 Health</button>
+          <button class="filter-chip" data-cat="Shopping" onclick="setFilterCat('Shopping')">👕 Shopping</button>
+          <button class="filter-chip" data-cat="Entertainment" onclick="setFilterCat('Entertainment')">🎮 Entertainment</button>
+          <button class="filter-chip" data-cat="Home & Utilities" onclick="setFilterCat('Home & Utilities')">🏠 Home</button>
+          <button class="filter-chip" data-cat="Tech" onclick="setFilterCat('Tech')">📱 Tech</button>
+          <button class="filter-chip" data-cat="Education" onclick="setFilterCat('Education')">📚 Education</button>
+          <button class="filter-chip" data-cat="Others" onclick="setFilterCat('Others')">💰 Others</button>
+        </div>
+        <p class="section-hint" style="margin-bottom:8px">Tap to edit · Swipe left to delete</p>
+        <div id="history-filter-summary" class="filter-summary hidden"></div>
+        <div id="history-list" class="history-list">
+          <p class="empty-state" id="history-empty-state">Loading history...</p>
+        </div>
+      </section>
+
+      <!-- DASHBOARD TAB -->
+      <section id="tab-dashboard" class="tab-content">
+        <h2 class="tab-title">Dashboard</h2>
+
+        <div id="wow-card" class="wow-card hidden">
+          <div class="wow-header">
+            <span class="wow-title">Week on Week</span>
+            <span id="wow-badge" class="wow-badge"></span>
+          </div>
+          <div class="wow-row">
+            <div class="wow-col">
+              <span class="wow-col-label">This Week</span>
+              <span id="wow-this" class="wow-col-value">Rp 0</span>
+            </div>
+            <div class="wow-divider"></div>
+            <div class="wow-col">
+              <span class="wow-col-label">Last Week</span>
+              <span id="wow-last" class="wow-col-value muted">Rp 0</span>
+            </div>
+          </div>
+          <div id="wow-breakdown" class="wow-breakdown"></div>
+        </div>
+
+        <div class="month-selector">
+          <button onclick="changeMonth(-1)">◀</button>
+          <span id="dashboard-month"></span>
+          <button onclick="changeMonth(1)">▶</button>
+        </div>
+
+        <div class="summary-cards">
+          <div class="summary-card">
+            <span class="summary-value" id="sum-total">Rp 0</span>
+            <span class="summary-label">Month Total</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-value" id="sum-avg">Rp 0</span>
+            <span class="summary-label">Avg / Spending Day</span>
+          </div>
+          <div class="summary-card accent">
+            <span class="summary-value" id="sum-top">—</span>
+            <span class="summary-label">Top Category</span>
+          </div>
+        </div>
+
+        <div class="budget-dashboard-card" id="budget-dashboard-card">
+          <div class="budget-dashboard-header">
+            <h3 class="chart-title">Monthly Budget</h3>
+            <button class="btn-edit-budget" onclick="openBudgetModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+          </div>
+          <div id="budget-bars" class="budget-bars-container"></div>
+          <button class="btn-set-budget-empty" id="btn-set-budget-empty" onclick="openBudgetModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Set monthly budget limits
+          </button>
+        </div>
+
+        <div class="chart-container">
+          <h3 class="chart-title">By Category</h3>
+          <canvas id="chart-pie"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3 class="chart-title">Daily</h3>
+          <canvas id="chart-bar"></canvas>
+        </div>
+        <div class="dashboard-actions">
+          <button class="btn-refresh-dashboard" onclick="loadDashboard()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
+          <button class="btn-generate-report" onclick="generateMonthlyReport()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Monthly Report
+          </button>
+        </div>
+      </section>
+
+      <!-- SETTINGS TAB -->
+      <section id="tab-settings" class="tab-content">
+        <h2 class="tab-title">Settings</h2>
+
+        <!-- Server Status -->
+        <div class="settings-card">
+          <h3 class="settings-section-title">Backend API</h3>
+          <p class="settings-note">v2.0 uses a server-side API for security. Your Anthropic key never leaves the server.</p>
+          <div id="api-health-display" class="api-health-row">
+            <span id="api-health-dot" class="health-dot"></span>
+            <span id="api-health-text">Checking...</span>
+          </div>
+          <label class="input-label" style="margin-top:12px">API URL</label>
+          <input type="text" id="set-api-url" class="input-field" placeholder="https://your-api.railway.app">
+          <button class="btn-secondary" onclick="saveApiUrl()">Save & Test</button>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-section-title">Google Sheets</h3>
+          <label class="input-label">Google Client ID</label>
+          <input type="text" id="set-client-id" class="input-field" placeholder="xxxx.apps.googleusercontent.com">
+          <label class="input-label">Google Sheet ID <span class="optional-tag">optional</span></label>
+          <input type="text" id="set-sheet-id" class="input-field" placeholder="Auto-created on first login">
+          <p class="settings-note" style="color:var(--text-muted);font-size:12px;margin-top:-8px">Leave blank — the server creates your Sheet automatically.</p>
+          <button class="btn-secondary" onclick="saveGoogleSettings()">Save</button>
+          <button class="btn-secondary" onclick="connectGoogleSheets()" style="margin-top:8px">Connect Google Sheets</button>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-section-title">Receipt OCR</h3>
+          <p class="settings-note">OCR is now handled server-side. No API key needed here — it's configured on the server.</p>
+          <div id="ocr-server-status" class="settings-note" style="color:var(--success)"></div>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-section-title">Appearance</h3>
+          <div class="setting-row">
+            <span class="setting-row-label">Dark Mode</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="dark-mode-toggle" onchange="toggleDark()">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-section-title">Sheet Setup</h3>
+          <p class="settings-note">Auto-setup creates the Transactions sheet with proper headers.</p>
+          <button class="btn-secondary" onclick="initSheetHeaders()">Auto-Setup Headers</button>
+        </div>
+
+        <!-- Templates Management -->
+        <div class="settings-card" id="template-settings">
+          <h3 class="settings-section-title">Quick Templates</h3>
+          <p class="settings-note">Templates let you fill the input form in 1 tap.</p>
+          <div id="template-manage-list" class="template-manage-list"></div>
+          <p id="template-empty-msg" class="settings-note" style="color:var(--text-muted);font-style:italic">No templates saved yet.</p>
+        </div>
+
+        <!-- Export CSV -->
+        <div class="settings-card">
+          <h3 class="settings-section-title">Export Data</h3>
+          <p class="settings-note">Download all transactions as CSV.</p>
+          <div class="export-options">
+            <div>
+              <p class="export-option-label">All time</p>
+              <p class="export-option-sub" id="export-count">— transactions</p>
+            </div>
+            <button class="btn-export" onclick="exportCSV('all')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <p class="version-text">Wallet Tracker v2.0 — by Farras<br><span style="color:var(--text-muted);font-size:11px">Multi-user · Server-side OCR · Secure API</span></p>
+        </div>
+      </section>
+
+    </main>
+
+  <!-- Budget Modal -->
+  <div id="budget-modal" class="modal-overlay hidden" onclick="closeBudgetModalIfOverlay(event)">
+    <div class="modal-content modal-budget">
+      <div class="modal-drag-handle"></div>
+      <div class="budget-modal-header">
+        <h3 class="modal-title">Monthly Budget</h3>
+        <button class="budget-modal-close" onclick="closeBudgetModal()">✕</button>
+      </div>
+      <p class="settings-note">Set spending limits per category.</p>
+      <div id="budget-modal-inputs" class="budget-grid"></div>
+      <button class="btn-primary btn-save-budget" onclick="saveBudgetsFromModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save Budget
+      </button>
+    </div>
+  </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="input" onclick="switchTab('input')">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
+        <span class="nav-label">Input</span>
+      </button>
+      <button class="nav-btn" data-tab="history" onclick="switchTab('history')">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+        <span class="nav-label">History</span>
+      </button>
+      <button class="nav-btn" data-tab="dashboard" onclick="switchTab('dashboard')">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-btn" data-tab="settings" onclick="switchTab('settings')">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span class="nav-label">Settings</span>
+      </button>
+    </nav>
+
+  </div><!-- end #app-screen -->
+
+</body>
+</html>
