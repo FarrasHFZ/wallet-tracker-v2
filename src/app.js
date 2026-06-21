@@ -840,13 +840,14 @@ function buildTransactionItem(tx, index, source) {
   const pending = !tx.sheetRow ? ' <span style="font-size:10px;color:#f59e0b">⏳</span>' : '';
   const txDate = parseTimestamp(tx.timestamp);
   const txTime = txDate && !isNaN(txDate) ? txDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+  item.style.borderLeftColor = cat.color;
   item.innerHTML =
-    '<span class="tx-emoji">' + cat.emoji + '</span>' +
+    '<div class="tx-icon-wrap" style="background:' + cat.color + '18">' + cat.emoji + '</div>' +
     '<div class="tx-details">' +
       '<div class="tx-desc">' + escHtml(tx.description) + pending + '</div>' +
-      '<div class="tx-cat">' + tx.category + (txTime ? ' · ' + txTime : '') + '</div>' +
+      '<div class="tx-meta">' + tx.category + (txTime ? ' · ' + txTime : '') + '</div>' +
     '</div>' +
-    '<div class="tx-right"><div class="tx-amount">Rp ' + tx.amount.toLocaleString('id-ID') + '</div></div>' +
+    '<div class="tx-amount">Rp ' + tx.amount.toLocaleString('id-ID') + '</div>' +
     '<span class="tx-edit-hint">✎</span>';
   item.addEventListener('click', () => openEdit(source, index));
   addSwipeToDelete(item, bg, wrapper, () => openDelete(source, index));
@@ -1058,34 +1059,69 @@ function applyHistoryFilter() {
 
 // ── Dashboard ─────────────────────────────────────────────────────
 async function loadDashboard() {
-  if (!allTransactions.length) {
-    try { const r = await API.Transactions.list(); allTransactions = (r.transactions || []).map(row => ({ ...row, sheetRow: row.rowIndex })).reverse(); } catch { return; }
+  try {
+    const r = await API.Transactions.list();
+    allTransactions = (r.transactions || []).map(row => ({
+      timestamp:   row.timestamp,
+      description: row.description,
+      amount:      row.amount,
+      category:    row.category,
+      month:       row.month,
+      week:        row.week,
+      notes:       row.notes,
+      sheetRow:    row.rowIndex,
+    })).reverse();
+  } catch (e) {
+    console.warn('Dashboard load error:', e.message);
   }
+
   const now   = dashboardMonth;
   const month = MONTH_NAMES[now.getMonth()] + ' ' + now.getFullYear();
   document.getElementById('dashboard-month').textContent = month;
 
   const monthTxs = allTransactions.filter(tx => {
-    const d = new Date(tx.timestamp);
-    return !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    const d = parseTimestamp(tx.timestamp);
+    return d && !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   });
 
   const total = monthTxs.reduce((s, tx) => s + tx.amount, 0);
-  const days  = new Set(monthTxs.map(tx => new Date(tx.timestamp).toDateString())).size;
+  const days  = new Set(monthTxs.map(tx => { const d = parseTimestamp(tx.timestamp); return d ? d.toDateString() : ''; }).filter(Boolean)).size;
   const catTotals = {};
   monthTxs.forEach(tx => { catTotals[tx.category] = (catTotals[tx.category] || 0) + tx.amount; });
-  const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+  const topCat    = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
   const topCatObj = topCat ? CATEGORIES.find(c => c.name === topCat[0]) : null;
 
-  document.getElementById('sum-total').textContent = 'Rp ' + total.toLocaleString('id-ID');
-  document.getElementById('sum-avg').textContent   = days ? 'Rp ' + Math.round(total / days).toLocaleString('id-ID') : 'Rp 0';
-  document.getElementById('sum-top').textContent   = topCatObj ? topCatObj.emoji + ' ' + topCat[0] : '—';
+  // Update hero card
+  const heroCard = document.getElementById('dashboard-hero-card');
+  if (heroCard) {
+    heroCard.innerHTML =
+      '<div class="dashboard-hero-label">Total spending</div>' +
+      '<div class="dashboard-hero-amount">Rp ' + total.toLocaleString('id-ID') + '</div>' +
+      '<div class="dashboard-hero-stats">' +
+        '<div class="hero-stat">' +
+          '<div class="hero-stat-label">Avg / day</div>' +
+          '<div class="hero-stat-value">' + (days ? 'Rp ' + Math.round(total / days).toLocaleString('id-ID') : 'Rp 0') + '</div>' +
+        '</div>' +
+        '<div class="hero-stat" style="padding-left:16px;border-left:1px solid rgba(255,255,255,.2)">' +
+          '<div class="hero-stat-label">Top category</div>' +
+          '<div class="hero-stat-value">' + (topCatObj ? topCatObj.emoji + ' ' + topCat[0] : '—') + '</div>' +
+        '</div>' +
+        '<div class="hero-stat" style="padding-left:16px;border-left:1px solid rgba(255,255,255,.2)">' +
+          '<div class="hero-stat-label">Transactions</div>' +
+          '<div class="hero-stat-value">' + monthTxs.length + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Legacy fallback elements
+  const el1 = document.getElementById('sum-total'); if (el1) el1.textContent = 'Rp ' + total.toLocaleString('id-ID');
+  const el2 = document.getElementById('sum-avg');   if (el2) el2.textContent = days ? 'Rp ' + Math.round(total / days).toLocaleString('id-ID') : 'Rp 0';
+  const el3 = document.getElementById('sum-top');   if (el3) el3.textContent = topCatObj ? topCatObj.emoji + ' ' + topCat[0] : '—';
 
   renderBudgetBars(catTotals);
   renderWoWCard(allTransactions);
   renderPieChart(catTotals);
   renderBarChart(monthTxs, now);
-}
 
 function changeMonth(delta) {
   dashboardMonth = new Date(dashboardMonth.getFullYear(), dashboardMonth.getMonth() + delta, 1);

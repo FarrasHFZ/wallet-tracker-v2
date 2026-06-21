@@ -365,18 +365,23 @@
           <button onclick="changeMonth(1)">▶</button>
         </div>
 
-        <div class="summary-cards">
-          <div class="summary-card">
-            <span class="summary-value" id="sum-total">Rp 0</span>
-            <span class="summary-label">Month Total</span>
-          </div>
-          <div class="summary-card">
-            <span class="summary-value" id="sum-avg">Rp 0</span>
-            <span class="summary-label">Avg / Spending Day</span>
-          </div>
-          <div class="summary-card accent">
-            <span class="summary-value" id="sum-top">—</span>
-            <span class="summary-label">Top Category</span>
+        <!-- Hero spending card — populated by JS -->
+        <div class="dashboard-hero" id="dashboard-hero-card">
+          <div class="dashboard-hero-label">Total spending</div>
+          <div class="dashboard-hero-amount">Rp 0</div>
+          <div class="dashboard-hero-stats">
+            <div class="hero-stat">
+              <div class="hero-stat-label">Avg / day</div>
+              <div class="hero-stat-value" id="sum-avg">Rp 0</div>
+            </div>
+            <div class="hero-stat" style="padding-left:16px;border-left:1px solid rgba(255,255,255,.2)">
+              <div class="hero-stat-label">Top category</div>
+              <div class="hero-stat-value" id="sum-top">—</div>
+            </div>
+            <div class="hero-stat" style="padding-left:16px;border-left:1px solid rgba(255,255,255,.2)">
+              <div class="hero-stat-label">Transactions</div>
+              <div class="hero-stat-value" id="sum-total">0</div>
+            </div>
           </div>
         </div>
 
