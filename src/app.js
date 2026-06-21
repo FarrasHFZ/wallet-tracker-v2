@@ -838,11 +838,13 @@ function buildTransactionItem(tx, index, source) {
   const item    = document.createElement('div'); item.className = 'transaction-item';
   item.style.borderLeftColor = cat.color;
   const pending = !tx.sheetRow ? ' <span style="font-size:10px;color:#f59e0b">⏳</span>' : '';
+  const txDate = parseTimestamp(tx.timestamp);
+  const txTime = txDate && !isNaN(txDate) ? txDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
   item.innerHTML =
     '<span class="tx-emoji">' + cat.emoji + '</span>' +
     '<div class="tx-details">' +
       '<div class="tx-desc">' + escHtml(tx.description) + pending + '</div>' +
-      '<div class="tx-cat">' + tx.category + '</div>' +
+      '<div class="tx-cat">' + tx.category + (txTime ? ' · ' + txTime : '') + '</div>' +
     '</div>' +
     '<div class="tx-right"><div class="tx-amount">Rp ' + tx.amount.toLocaleString('id-ID') + '</div></div>' +
     '<span class="tx-edit-hint">✎</span>';
@@ -1036,14 +1038,19 @@ function applyHistoryFilter() {
   list.innerHTML = '';
   // Group by date
   const groups = {};
+  const groupOrder = [];
   filtered.forEach((tx, i) => {
-    const d     = new Date(tx.timestamp);
-    const label = isNaN(d) ? 'Unknown' : d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    if (!groups[label]) groups[label] = [];
+    const d     = parseTimestamp(tx.timestamp);
+    const label = (!d || isNaN(d)) ? 'Tanggal tidak tersedia' : d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    if (!groups[label]) { groups[label] = []; groupOrder.push(label); }
     groups[label].push({ tx, i: allTransactions.indexOf(tx) });
   });
-  for (const [label, items] of Object.entries(groups)) {
-    const header = document.createElement('div'); header.className = 'history-date-header'; header.textContent = label;
+  for (const label of groupOrder) {
+    const items = groups[label];
+    const groupTotal = items.reduce((s, { tx }) => s + tx.amount, 0);
+    const header = document.createElement('div');
+    header.className = 'history-date-header';
+    header.innerHTML = '<span>' + label + '</span><span class="history-date-total">Rp ' + groupTotal.toLocaleString('id-ID') + '</span>';
     list.appendChild(header);
     items.forEach(({ tx, i }) => list.appendChild(buildTransactionItem(tx, i, 'history')));
   }
@@ -1320,4 +1327,20 @@ function showToast(msg, type = 'info') {
 }
 
 // ── Utility ───────────────────────────────────────────────────────
+
+// ── Parse timestamp (handles ISO, Google Sheets serial, and plain strings) ─
+function parseTimestamp(ts) {
+  if (!ts) return null;
+  // Standard ISO string
+  let d = new Date(ts);
+  if (!isNaN(d)) return d;
+  // Google Sheets sometimes returns DD/MM/YYYY HH:MM:SS format
+  const parts = String(ts).match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (parts) {
+    d = new Date(parseInt(parts[3]), parseInt(parts[2])-1, parseInt(parts[1]));
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
