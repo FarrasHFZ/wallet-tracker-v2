@@ -222,8 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const savedDark = Config.get('darkMode');
   applyDarkMode(savedDark !== 'false');
   updateQueueUI();
-  renderTemplates();
-  renderTemplateManageList();
 
   window.addEventListener('online',  () => { isOnline = true;  onOnline(); });
   window.addEventListener('offline', () => { isOnline = false; onOffline(); });
